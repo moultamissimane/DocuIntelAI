@@ -16,6 +16,7 @@ interface HeaderProps {
   activeView: 'rag' | 'documents' | 'architecture';
   setActiveView: (view: 'rag' | 'documents' | 'architecture') => void;
   documentCount: number;
+  backendOnline: boolean | null;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -24,6 +25,7 @@ export const Header: React.FC<HeaderProps> = ({
   activeView,
   setActiveView,
   documentCount,
+  backendOnline,
 }) => {
   return (
     <header className="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md sticky top-0 z-30">
@@ -88,8 +90,12 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Actions & Status */}
           <div className="flex items-center gap-3">
             <div className="hidden lg:flex items-center gap-2 text-xs text-slate-400 px-3 py-1.5 rounded-lg bg-slate-900/60 border border-slate-800/80">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span className="font-mono text-slate-300">pgvector: 768d HNSW</span>
+              <span className={`w-2 h-2 rounded-full ${
+                backendOnline === null ? 'bg-slate-500' : backendOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+              }`}></span>
+              <span className="font-mono text-slate-300">
+                {backendOnline === null ? 'Checking backend...' : backendOnline ? 'FastAPI + pgvector: online' : 'Offline demo mode'}
+              </span>
             </div>
 
             <button

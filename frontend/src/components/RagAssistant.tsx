@@ -20,6 +20,20 @@ import {
 import { DocumentItem, RagQuery, RagCitation } from '../types';
 import { executeQueryEngine } from '../utils/ragEngine';
 
+async function fetchRagAnswer(question: string, selectedDocId: string | undefined): Promise<RagQuery> {
+  const response = await fetch('/api/query', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question, selectedDocId }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Backend returned ${response.status}`);
+  }
+
+  return response.json();
+}
+
 interface RagAssistantProps {
   documents: DocumentItem[];
   history: RagQuery[];
@@ -85,56 +99,22 @@ export const RagAssistant: React.FC<RagAssistantProps> = ({
     setInputQuery('');
     setIsProcessing(true);
 
-    // Simulated multi-stage pipeline animation
-    setActivePipelineStep('1. FastAPI Python Route: /v1/rag/query');
-    await new Promise(r => setTimeout(r, 200));
+    // Live pipeline stage indicators while we await the FastAPI backend
+    setActivePipelineStep('1. FastAPI Python Route: POST /api/query');
+    await new Promise(r => setTimeout(r, 150));
 
     setActivePipelineStep('2. PostgreSQL pgvector: 768d HNSW Cosine Similarity Query');
-    await new Promise(r => setTimeout(r, 250));
-
-    setActivePipelineStep('3. Context Chunk Extraction & Metadata Filtering');
-    await new Promise(r => setTimeout(r, 200));
-
-    setActivePipelineStep('4. LLM API Synthesis & Citation Grounding');
 
     try {
-      // First try calling our server backend /api/rag/ask endpoint
-      let serverAnswer: string | null = null;
-      let finalResult = executeQueryEngine(q, documents, selectedDocId);
-
+      let finalResult: RagQuery;
       try {
-        const response = await fetch('/api/rag/ask', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            question: q,
-            contextChunks: finalResult.citations.map(c => ({
-              docTitle: c.docTitle,
-              chunkId: c.chunkId,
-              page: c.page,
-              text: c.textExcerpt
-            })),
-            filterCriteria: { selectedDocId }
-          })
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          if (data.answer) {
-            serverAnswer = data.answer;
-          }
-        }
+        finalResult = await fetchRagAnswer(q, selectedDocId);
       } catch (err) {
-        // Fallback gracefully to offline deterministic RAG engine
+        console.warn('Backend unreachable, falling back to offline RAG engine:', err);
+        finalResult = executeQueryEngine(q, documents, selectedDocId);
       }
 
-      if (serverAnswer) {
-        finalResult = {
-          ...finalResult,
-          answer: serverAnswer
-        };
-      }
-
+      setActivePipelineStep('3. LLM Synthesis & Citation Grounding');
       setHistory(prev => [...prev, finalResult]);
     } catch (e) {
       console.error('RAG Query error:', e);

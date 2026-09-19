@@ -1,15 +1,12 @@
 import React, { useState } from 'react';
-import { 
-  X, 
-  UploadCloud, 
-  FileText, 
-  CheckCircle, 
-  AlertCircle, 
-  Sparkles, 
-  Layers, 
-  FileCode, 
+import {
+  X,
+  UploadCloud,
+  FileText,
+  Sparkles,
   ArrowRight,
-  Loader2
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 import { DocumentItem, DocumentType } from '../types';
 
@@ -19,173 +16,102 @@ interface UploadModalProps {
   onDocumentAdded: (doc: DocumentItem) => void;
 }
 
+// Quick enterprise demo templates: real .txt files sent through the same
+// upload/extraction/embedding pipeline as any user-provided document.
+const demoTemplates: { name: string; type: DocumentType; text: string }[] = [
+  {
+    name: 'Sahara_Logistics_Haulage_Agreement_2024.txt',
+    type: 'contract',
+    text: 'HAULAGE MASTER AGREEMENT between Client and Sahara Freight & Haulage SARL. Supplier guarantees temperature-controlled reefer fleet, 99.5% delivery integrity, and 24-hour dispatch. Payment terms: Net 30 days upon inspection by Casablanca warehouse manager. Expiration date: 2026-10-18.',
+  },
+  {
+    name: 'Invoice_INV-2024-9420_SolarPanelsCasablanca.txt',
+    type: 'invoice',
+    text: 'COMMERCIAL INVOICE INV-2024-9420. Maroc Solar Energy SA. Total: 88,500 MAD (TTC). Scope: 40kW Inverter systems and lithium battery energy storage rack. Payment terms: Net 45 days. Due date: 2026-10-15.',
+  },
+  {
+    name: 'API_Async_Ingestion_Pipeline_Guide.txt',
+    type: 'technical_doc',
+    text: 'INGESTION SPECIFICATION: Python FastAPI handles file upload streams. Chunks are generated using a 400-word recursive splitter with 50-word overlap. Vectors stored in PostgreSQL with the pgvector extension using an HNSW cosine index.',
+  },
+];
+
 export const UploadModal: React.FC<UploadModalProps> = ({
   isOpen,
   onClose,
   onDocumentAdded,
 }) => {
-  if (!isOpen) return null;
-
   const [dragActive, setDragActive] = useState(false);
   const [selectedType, setSelectedType] = useState<DocumentType>('contract');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [currentStep, setCurrentStep] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Quick enterprise demo templates
-  const demoTemplates = [
-    {
-      name: 'Sahara_Logistics_Haulage_Agreement_2024.pdf',
-      type: 'contract' as DocumentType,
-      title: 'Heavy Logistics Transport & Haulage Master Agreement',
-      counterparty: 'Sahara Freight & Haulage SARL',
-      amount: null,
-      currency: 'MAD' as const,
-      paymentTerms: 'Net 30 days following freight delivery confirmation by Casablanca warehouse manager.',
-      expiry: '2024-10-18',
-      days: 29,
-      text: 'HAULAGE MASTER AGREEMENT. Supplier Sahara Freight & Haulage SARL guarantees temperature-controlled reefer fleet, 99.5% delivery integrity, and 24-hour dispatch. Payment terms: Net 30 days upon inspection. Expiration date: October 18, 2024.'
-    },
-    {
-      name: 'Invoice_INV-2024-9420_SolarPanelsCasablanca.pdf',
-      type: 'invoice' as DocumentType,
-      title: 'Solar Photovoltaic Inverter & Battery Bank Delivery',
-      counterparty: 'Maroc Solar Energy SA',
-      amount: 88500,
-      currency: 'MAD' as const,
-      paymentTerms: 'Net 45 days. Attijariwafa Bank wire transfer.',
-      expiry: '2024-10-15',
-      days: 26,
-      text: 'COMMERCIAL INVOICE INV-2024-9420. Maroc Solar Energy SA. Total: 88,500 MAD (TTC). Scope: 40kW Inverter systems and lithium battery energy storage rack. Due date: October 15, 2024.'
-    },
-    {
-      name: 'API_Async_Ingestion_Pipeline_Guide.docx',
-      type: 'technical_doc' as DocumentType,
-      title: 'High-Throughput Asynchronous Ingestion & pgvector HNSW Guide',
-      counterparty: 'Data Platform Architecture Team',
-      amount: null,
-      currency: 'USD' as const,
-      paymentTerms: 'Internal Architecture Specification',
-      expiry: undefined,
-      days: undefined,
-      text: 'INGESTION SPECIFICATION: Python FastAPI with Celery / Redis broker handles file upload streams. Chunks are generated using 512-token RecursiveSplitter. Vectors stored in PostgreSQL with pgvector extension.'
-    }
-  ];
+  if (!isOpen) return null;
 
-  const simulateProcessing = async (
-    filename: string,
-    type: DocumentType,
-    title: string,
-    counterparty: string,
-    rawText: string,
-    amount: number | null,
-    paymentTerms: string,
-    expiry?: string,
-    days?: number
-  ) => {
+  const uploadFile = async (file: File, type: DocumentType) => {
     setIsProcessing(true);
+    setErrorMessage(null);
+    setStatusMessage(`Uploading ${file.name} to /api/documents/upload...`);
 
-    setCurrentStep('1/4 Parsing PDF/DOCX binary stream (PyMuPDF & python-docx)...');
-    await new Promise(r => setTimeout(r, 450));
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('doc_type', type);
 
-    setCurrentStep('2/4 Validating Pydantic v2 metadata schema & entities...');
-    await new Promise(r => setTimeout(r, 400));
+      const response = await fetch('/api/documents/upload', {
+        method: 'POST',
+        body: formData,
+      });
 
-    setCurrentStep('3/4 Generating 768-dim embeddings with RecursiveTextSplitter...');
-    await new Promise(r => setTimeout(r, 450));
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.detail || `Upload failed with status ${response.status}`);
+      }
 
-    setCurrentStep('4/4 Indexing chunks into PostgreSQL pgvector HNSW table...');
-    await new Promise(r => setTimeout(r, 350));
+      setStatusMessage('Parsing, chunking, and embedding document...');
+      const newDoc: DocumentItem = await response.json();
 
-    const newDoc: DocumentItem = {
-      id: `doc-${Date.now()}`,
-      name: filename,
-      type,
-      fileFormat: filename.endsWith('.docx') ? 'docx' : 'pdf',
-      fileSize: '1.8 MB',
-      uploadDate: new Date().toISOString().split('T')[0],
-      status: 'indexed',
-      extractedData: {
-        title,
-        counterparty,
-        invoiceNumber: type === 'invoice' ? `INV-${Math.floor(1000 + Math.random() * 9000)}` : undefined,
-        totalAmount: amount || undefined,
-        currency: 'MAD',
-        effectiveDate: new Date().toISOString().split('T')[0],
-        expiryDate: expiry,
-        daysUntilExpiry: days,
-        paymentTerms,
-        supplierObligations: type === 'contract' ? [
-          'Maintain 99.8% SLA on agreed services and provide monthly executive reports.',
-          'Execute emergency response protocol within 2 hours for critical disruption.',
-          'Comply with Moroccan commercial and labor standards.'
-        ] : undefined,
-        summary: `Extracted ${type} document for ${counterparty}. Structured entities parsed via FastAPI Pydantic validator.`,
-        confidenceScore: 0.987,
-        ocrEngine: 'PyMuPDF + Tesseract v5.3 / python-docx',
-        pydanticValidated: true,
-        processingTimeMs: 380,
-      },
-      chunks: [
-        {
-          id: `chk-${Date.now()}-1`,
-          chunkIndex: 1,
-          page: 1,
-          tokenCount: 260,
-          content: rawText,
-          embeddingSample: [0.082, -0.194, 0.381, 0.114, -0.045],
-          clauseType: type === 'contract' ? 'Terms & Obligations' : type === 'invoice' ? 'Amounts & Remittance' : 'System Overview'
-        },
-        {
-          id: `chk-${Date.now()}-2`,
-          chunkIndex: 2,
-          page: 2,
-          tokenCount: 220,
-          content: `${paymentTerms}. Applicable under Moroccan commercial jurisdiction.`,
-          embeddingSample: [0.125, -0.098, 0.412, -0.180, 0.195],
-          clauseType: 'Payment Terms & Enforcement'
-        }
-      ],
-      rawText
-    };
-
-    onDocumentAdded(newDoc);
-    setIsProcessing(false);
-    setCurrentStep(null);
-    onClose();
+      onDocumentAdded(newDoc);
+      onClose();
+    } catch (err: any) {
+      setErrorMessage(
+        err.message?.includes('fetch')
+          ? 'Could not reach the backend at /api/documents/upload. Is the FastAPI server running?'
+          : err.message || 'Upload failed.'
+      );
+    } finally {
+      setIsProcessing(false);
+      setStatusMessage(null);
+    }
   };
 
   const handleCustomUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const isDocx = file.name.endsWith('.docx');
-    const isPdf = file.name.endsWith('.pdf');
-    const type: DocumentType = file.name.toLowerCase().includes('invoice') 
-      ? 'invoice' 
-      : file.name.toLowerCase().includes('contract') 
-      ? 'contract' 
+    const type: DocumentType = file.name.toLowerCase().includes('invoice')
+      ? 'invoice'
+      : file.name.toLowerCase().includes('contract')
+      ? 'contract'
       : selectedType;
 
-    simulateProcessing(
-      file.name,
-      type,
-      file.name.replace(/\.[^/.]+$/, "").replace(/_/g, " "),
-      'Custom Enterprise Partner',
-      `Custom uploaded enterprise file: ${file.name}. Processed via Document Processing pipeline. Payment terms Net 30 days.`,
-      type === 'invoice' ? 62000 : null,
-      'Net 30 days upon delivery confirmation.',
-      type === 'contract' ? '2024-10-12' : undefined,
-      type === 'contract' ? 23 : undefined
-    );
+    uploadFile(file, type);
+  };
+
+  const handleDemoTemplate = (tpl: (typeof demoTemplates)[number]) => {
+    const blob = new Blob([tpl.text], { type: 'text/plain' });
+    const file = new File([blob], tpl.name, { type: 'text/plain' });
+    uploadFile(file, tpl.type);
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 sm:p-6 overflow-y-auto">
-      <div 
+      <div
         className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
-        
+
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/60">
           <div className="flex items-center gap-2.5">
@@ -211,14 +137,21 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
         {/* Modal Body */}
         <div className="p-6 space-y-6 text-sm text-slate-300">
-          
+
+          {errorMessage && (
+            <div className="bg-red-950/40 border border-red-800/60 rounded-xl p-3.5 flex items-start gap-2.5 text-xs text-red-300">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
           {/* Live Ingestion Pipeline Status */}
           {isProcessing ? (
             <div className="bg-slate-950 border border-cyan-800 rounded-xl p-6 text-center space-y-4">
               <Loader2 className="w-8 h-8 text-cyan-400 animate-spin mx-auto" />
               <div>
                 <h4 className="font-bold text-white text-sm">Processing Document Pipeline</h4>
-                <p className="text-xs font-mono text-cyan-300 mt-1">{currentStep}</p>
+                <p className="text-xs font-mono text-cyan-300 mt-1">{statusMessage}</p>
               </div>
               <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden max-w-md mx-auto">
                 <div className="bg-cyan-500 h-full rounded-full animate-pulse w-3/4"></div>
@@ -226,6 +159,24 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             </div>
           ) : (
             <>
+              {/* Document Type Selector */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-slate-400">Document type:</span>
+                {(['contract', 'invoice', 'technical_doc'] as DocumentType[]).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setSelectedType(t)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                      selectedType === t
+                        ? 'bg-cyan-600 text-white'
+                        : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-white'
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+
               {/* Dropzone */}
               <div
                 onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
@@ -234,19 +185,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                   e.preventDefault();
                   setDragActive(false);
                   const file = e.dataTransfer.files[0];
-                  if (file) {
-                    simulateProcessing(
-                      file.name,
-                      selectedType,
-                      file.name.replace(/\.[^/.]+$/, "").replace(/_/g, " "),
-                      'Uploaded Enterprise Partner',
-                      `Extracted content from ${file.name}. Payment terms Net 30 days.`,
-                      selectedType === 'invoice' ? 55000 : null,
-                      'Net 30 days upon invoice validation.',
-                      selectedType === 'contract' ? '2024-10-10' : undefined,
-                      selectedType === 'contract' ? 21 : undefined
-                    );
-                  }
+                  if (file) uploadFile(file, selectedType);
                 }}
                 className={`border-2 border-dashed rounded-2xl p-6 sm:p-8 text-center transition-all ${
                   dragActive
@@ -286,17 +225,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                   {demoTemplates.map((tpl, i) => (
                     <button
                       key={i}
-                      onClick={() => simulateProcessing(
-                        tpl.name,
-                        tpl.type,
-                        tpl.title,
-                        tpl.counterparty,
-                        tpl.text,
-                        tpl.amount,
-                        tpl.paymentTerms,
-                        tpl.expiry,
-                        tpl.days
-                      )}
+                      onClick={() => handleDemoTemplate(tpl)}
                       className="bg-slate-950/80 hover:bg-slate-950 border border-slate-800 hover:border-cyan-700/60 rounded-xl p-3.5 text-left transition-all group flex items-center justify-between gap-3 shadow-sm"
                     >
                       <div className="flex items-center gap-3 min-w-0">
@@ -306,24 +235,14 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                         <div className="truncate">
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-white text-xs truncate group-hover:text-cyan-300">
-                              {tpl.title}
+                              {tpl.name}
                             </span>
                             <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
                               {tpl.type}
                             </span>
-                            {tpl.amount && (
-                              <span className="text-[10px] font-bold text-emerald-400">
-                                {tpl.amount.toLocaleString()} {tpl.currency}
-                              </span>
-                            )}
-                            {tpl.days && (
-                              <span className="text-[10px] text-amber-400">
-                                {tpl.days}d expiry
-                              </span>
-                            )}
                           </div>
                           <p className="text-[11px] text-slate-400 truncate mt-0.5">
-                            {tpl.counterparty} • {tpl.name}
+                            {tpl.text.slice(0, 70)}...
                           </p>
                         </div>
                       </div>
@@ -343,7 +262,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
         {/* Footer */}
         <div className="px-6 py-3 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between text-xs text-slate-400">
-          <span>FastAPI Python Backend: Active</span>
+          <span>FastAPI Python Backend</span>
           <button
             onClick={onClose}
             disabled={isProcessing}
