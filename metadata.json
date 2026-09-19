@@ -1,0 +1,7 @@
+{
+  "name": "AI Document Intelligence Platform",
+  "description": "Enterprise AI document intelligence and RAG platform for extracting, understanding, and querying contracts, invoices, and technical documentation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
